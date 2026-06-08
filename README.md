@@ -1,219 +1,182 @@
+# CChatMind
 
-# AI智能体助手-JChatMind
+CChatMind 是一个基于 Spring Boot、Spring AI、React 和 PostgreSQL/pgvector 构建的 AI Agent 助手项目。项目围绕“可配置 Agent、持续对话、工具调用、知识库检索和实时执行状态推送”展开，目标是把大模型能力从简单聊天接口扩展成一个可维护、可扩展的工程系统。
 
-最近很多录友在做 AI 项目，但我发现一个普遍问题：
+> 说明：本仓库基于 MIT 开源项目学习和二次开发，保留原始开源协议声明。当前仓库用于个人学习、工程实践和面试展示，重点补充本地部署、问题修复、运行链路理解和后续功能扩展。
 
-简历写着“接入大模型、实现聊天”。
+## 核心能力
 
-面试官一句话就能给你问懵：“**那你到底做了什么？不就是调 API 吗**？”
+- Agent 配置管理：支持创建不同 Agent，配置名称、描述、system prompt、模型和能力边界。
+- 多轮会话：通过 `chat_session` 和 `chat_message` 保存对话状态，支持按 session 维度恢复上下文。
+- 模型接入：基于 Spring AI 接入 DeepSeek 等 ChatModel，并通过统一 ChatClient 使用。
+- 工具调用：将外部能力抽象为可注册工具，Agent 可以在执行过程中调用工具完成任务。
+- RAG 知识库：支持文档解析、chunk 切分、embedding 入库和 pgvector 相似度检索。
+- SSE 实时推送：后端通过 Server-Sent Events 向前端推送 Agent 执行状态和回复结果。
+- 前后端分离：后端提供 REST/SSE API，前端使用 React + Ant Design X 构建交互界面。
 
-一个聊天对话框和agent 是有区别的。
+## 技术栈
 
-我这次在[知识星球](https://programmercarl.com/other/kstar.html)里**更新一个Java Agent项目**：JChatMind（AI智能体助手）
+### 后端
 
-JChatMind 是一个智能 AI Agent 系统，基于 Spring AI 框架构建，实现了自主决策、工具调用和知识库检索等核心能力。
+- Java 17
+- Spring Boot 3
+- Spring AI
+- MyBatis
+- PostgreSQL
+- pgvector
+- Maven
 
-系统采用 **Think-Execute 循环机制，能够理解复杂任务、规划执行步骤、调用外部工具，并基于 RAG 技术从知识库中检索相关信息，完成多步骤的复杂任务**。
+### 前端
 
-它不是“聊天机器人”，而是 Agent：**能规划、能调用工具、能检索知识库、还能把执行过程实时推给前端**。
+- React
+- TypeScript
+- Vite
+- Ant Design / Ant Design X
 
-你做完它，面试官再问 AI 项目，你能讲的就不是“我接了个接口”，而是：
+### AI 与检索
 
-* 我实现了 Think-Execute 循环（自主决策）
-* 我实现了 工具调用框架（可扩展）
-* 我实现了 RAG + 向量检索（pgvector）
-* 我实现了 多模型切换架构（注册表模式）
-* 我实现了 SSE 实时推送（执行状态可视化）
+- DeepSeek Chat Model
+- Embedding Model
+- RAG
+- Vector Similarity Search
+- PostgreSQL + pgvector
 
-### 项目演示
+## 系统设计
 
-![image](https://file1.kamacoder.com/i/web/2026-01-09_16-30-36.jpg)
+项目可以拆成几条主链路：
 
-![image](https://file1.kamacoder.com/i/web/2026-01-09_16-31-19.jpg)
+### 1. Agent 配置链路
 
-![image](https://file1.kamacoder.com/i/web/2026-01-09_16-31-49.jpg)
+`agent` 表保存 Agent 的长期配置，例如名称、描述、system prompt、模型类型、可用工具和可访问知识库。
 
-![image](https://file1.kamacoder.com/i/web/2026-01-09_16-32-08.jpg)
+这部分不是一次请求的临时状态，而是 Agent 的“能力定义”。这样做的好处是：新增或调整 Agent 时，不需要频繁修改核心代码。
 
-### 项目专栏目录
+### 2. 对话状态链路
 
-![](https://file1.kamacoder.com/i/web/2026-01-08_10-43-35.jpg)
+`chat_session` 表表示一次对话，`chat_message` 表保存该对话中的消息。
 
-从理论基础：agent的基本概念
+用户继续追问时，系统可以根据 `session_id` 查询历史消息，重新拼接上下文，再交给大模型生成回复。
 
-到项目实战：大模型怎么用、环境怎么搭，Agent loop如何设计，怎么引入知识库与RAG，以及MCP
+### 3. RAG 检索链路
 
-最后再到求职相关：项目的简历写法、项目亮点、本项目常见面试题，都给大家准备好了。
+RAG 的完整流程：
 
-从**项目源码到答疑，一条龙服务，不用担心学不会，有什么问题都可以在专属微信群提问**：（[知识星球](https://programmercarl.com/other/kstar.html)里每个项目都有专属答疑群）
+```text
+原始文档
+  -> 文档解析
+  -> 文本切分 chunk
+  -> embedding 模型生成向量
+  -> 写入 chunk_bge_m3
 
-![](https://file1.kamacoder.com/i/web/2026-01-08_10-59-23.jpg)
+用户问题
+  -> 生成 query embedding
+  -> pgvector 相似度检索 top-k chunk
+  -> 将 chunk 文本拼入 prompt
+  -> LLM 基于资料回答
+```
 
-### 项目架构图
+其中，`chunk_bge_m3` 存的是预处理后的文本片段和向量。向量负责“找”，chunk 文本负责“给模型看”。
 
-![](https://file1.kamacoder.com/i/web/2026-01-08_11-19-14.jpg)
+### 4. SSE 实时通信链路
 
-JChatMind 通过分层架构 + Agent 核心服务，把 AI 能力（模型、RAG、工具）抽象成可组合、可扩展的系统模块
+Agent 执行不是简单的一次 HTTP 请求。后端通过 SSE 建立从服务端到前端的单向实时通道，用于推送：
 
-### 获取本专栏
+- 连接初始化
+- Agent 思考状态
+- 工具执行状态
+- 模型回复结果
+- 异常和结束状态
 
-扫如下十元代金券，只需要 196元，加入[知识星球](https://programmercarl.com/other/kstar.html)，你将**获取20+套项目教程的专栏+源码+配套答疑**： （每个项目不到十元钱，而且**加入星球的服务远不止就这些项目**！）
+相比 WebSocket，SSE 更适合这种“服务端持续推送、前端只接收”的场景。
 
-如果不知道[知识星球](https://programmercarl.com/other/kstar.html)对自己是否有帮助，可以进来看看，感受一下星球里的学习氛围，**三天（72h）内可以全额退款**！
+## 本地运行
 
-知识星球APP右上角 自己申请退款，一个小时到账 全程无套路， **记得是三天内（72h）才能退款**。
+### 1. 准备环境
 
-### 项目专栏细节
+需要安装：
 
-理论知识讲解：
+- JDK 17
+- Node.js
+- PostgreSQL
+- pgvector
+- Maven
 
-![](https://file1.kamacoder.com/i/web/2026-01-08_11-02-38.jpg)
+### 2. 数据库配置
 
-循序渐进，带你做agent实战开发：
+后端默认读取：
 
-![](https://file1.kamacoder.com/i/web/2026-01-08_11-03-33.jpg)
+```text
+jchatmind/src/main/resources/application.yaml
+```
 
-![](https://file1.kamacoder.com/i/web/2026-01-08_11-03-57.jpg)
+需要根据本地环境配置：
 
-![](https://file1.kamacoder.com/i/web/2026-01-08_11-03-57.jpg)
+- PostgreSQL 地址
+- 数据库用户名
+- 数据库密码
+- DeepSeek API Key
+- 邮箱授权码等可选配置
 
-![](https://file1.kamacoder.com/i/web/2026-01-08_11-04-20.jpg)
+不要把真实密钥提交到公开仓库。建议后续改成环境变量或本地 `application-local.yaml`。
 
-![](https://file1.kamacoder.com/i/web/2026-01-08_11-04-41.jpg)
+### 3. 启动后端
 
-最后，求职相关，简历写法、相关面试题，技术亮点 都安排的明明白白：
+```bash
+cd jchatmind
+mvn spring-boot:run
+```
 
-**技术亮点、性能指标、功能指标、技术指标**，都给大家列出，甚至，不同岗位（后端、算法、大模型）使用这个项目的简历写法，都列出来，让面试没有死角：
+默认后端地址：
 
-![](https://file1.kamacoder.com/i/web/2026-01-08_11-05-09.jpg)
+```text
+http://localhost:8080
+```
 
-**技术选型的理由、技术难点、解决方案、技术成长点、深入解析计数原理**：
+### 4. 启动前端
 
-![](https://file1.kamacoder.com/i/web/2026-01-08_11-11-08.jpg)
+```bash
+cd ui
+npm install
+npm run dev
+```
 
-针对项目原理和项目实现都准备了相关面试题
+默认前端地址：
 
-项目原理面试题以及回答：
-![](https://file1.kamacoder.com/i/web/2026-01-08_11-15-22.jpg)
+```text
+http://localhost:5173
+```
 
-项目实战面试题以及回答：
-![](https://file1.kamacoder.com/i/web/2026-01-08_11-14-09.jpg)
+## 我在项目中的实践内容
 
+当前仓库重点用于学习和面试准备，我已经完成或重点梳理了以下内容：
 
-### 项目亮点
+- 完成本地 Java、Maven、Node.js、PostgreSQL 环境配置。
+- 完成项目数据库导入和本地联调。
+- 理解并梳理 Agent、chat session、chat message、knowledge base、document、chunk 等核心数据模型。
+- 修复首条用户消息发送和 SSE 连接初始化之间的时序问题。
+- 优化 SSE 后端发送逻辑，避免客户端断开后异常中断主流程。
+- 将本地环境脚本和敏感配置加入 `.gitignore`，避免误提交。
 
-1、**真正的 Agent Loop（Think-Execute 循环 + 状态机**）
+## 面试可讲点
 
-不是“调用一次大模型就结束”，而是支持：
+- 为什么 Agent 项目不能只理解成“调大模型 API”？
+- Agent 配置、会话状态、消息记录为什么要拆表？
+- RAG 为什么需要 chunk？chunk embedding 是否预先生成？
+- BGE-M3 / embedding model 在 RAG 中负责什么？
+- PostgreSQL + pgvector 和独立向量数据库相比有什么取舍？
+- SSE 和 WebSocket 在 Agent 执行状态推送中的区别是什么？
+- 如何避免 Agent 工具调用无限循环？
+- 如何设计可扩展的模型注册和工具注册机制？
 
-* 多轮规划
-* 多轮工具调用
-* 状态管理（THINKING / EXECUTING / DONE / ERROR）
-* 错误处理与最大步数控制（防止无限循环）
+## 后续计划
 
-这里的技术点：“怎么避免 Agent 无限调用工具？怎么做状态管理？怎么做超时控制？”
+- 将 API Key、数据库密码等配置改为环境变量。
+- 增加 Docker Compose，一键启动 PostgreSQL、后端和前端。
+- 补充数据库初始化脚本和示例数据。
+- 增加 RAG 检索结果可视化，展示命中的 chunk 和相似度。
+- 增加单元测试和接口测试。
+- 增强 Agent 工具调用的错误恢复和执行轨迹记录。
 
-2、**工具系统（固定工具 + 可选工具，可扩展、可治理**）
+## License
 
-很多人做工具调用只是“写几个 if else”，JChatMind 的工具系统是“框架化”的：
-
-* 工具自动注册
-* 固定工具 / 可选工具分类管理
-* 可扩展：新增工具不改核心流程
-* 可控：禁用 Spring AI 自动执行，改为手动管理 ToolCalling 流程
-
-这里的技术点：“工具调用怎么做扩展？工具失败怎么处理？工具返回结果怎么进入对话历史？”
-
-这就是讲“系统设计”的地方。
-
-3、**RAG 知识库（PostgreSQL + pgvector**）
-
-RAG 不是 PPT 概念，JChatMind 是完整链路：
-
-* Markdown 文档解析、分块
-* Embedding 生成并落库
-* pgvector 相似度检索（<->）
-* ivfflat 索引优化，支持 10 万+向量
-
-而且最关键的点是：用 PostgreSQL 一套体系把结构化数据和向量数据都管了（部署简单、成本低、事务一致性好）
-
-4、**多模型支持（注册表模式 ChatClientRegistry**）
-
-项目不是“绑定一个模型”，而是：
-
-* DeepSeek / 智谱 AI 可切换
-* 统一 ChatClient 接口
-* 注册表模式管理模型实例（解耦创建与使用）
-* 便于未来扩展更多模型
-
-这里也涉及到：如果要加一个新模型要改哪些代码？怎么做到无侵入？
-
-5、**SSE 实时通信（执行过程实时可视化**）
-
-很多 Agent 项目体验很差：用户不知道系统在干嘛。
-
-JChatMind 用 SSE 做了：
-
-* 状态实时推送：THINKING / EXECUTING / DONE
-* 前端能实时看到“Agent 正在干啥”
-* 比 WebSocket 更简单，适合单向推送
-
-这里会涉及到：SSE 和 WebSocket 区别？连接怎么管理？超时怎么处理？并发怎么扛？
-
-这又是一套高质量八股 + 项目结合。
-
-
-### 学完本项目可以掌握什么？
-
-* AI Agent 核心：Think-Execute 循环（多轮规划 + 多轮工具调用）+ 状态机 + 超时/错误处理
-* 工具调用体系：可扩展工具框架（固定/可选工具）、工具注册与调度、手动接管 Spring AI 工具执行流程
-* RAG 全链路：Markdown 解析与分块 → Embedding 入库 → pgvector 相似度检索（索引优化、SQL 调优）
-* 多模型架构设计：ChatClientRegistry 注册表模式，支持 DeepSeek/智谱等模型动态切换与扩展
-* 后端工程能力：Spring Boot 分层架构、RESTful API、统一异常/响应、MyBatis 复杂 SQL + 自定义 TypeHandler（vector）
-* 实时通信：SSE 服务端推送、连接管理、执行状态实时展示
-* 可量化成果表达：响应 <2s、并发 100+、检索准确率 85%+ 这种“面试官一眼懂”的指标怎么做、怎么写、怎么讲
-
-
-### 加入知识星球获取本项目
-
-加入[知识星球](https://programmercarl.com/other/kstar.html) 获取本项目。
-
-加入[知识星球](https://mp.weixin.qq.com/s/iUiIRYlJvNqTsvfQXwK6FA)四大权益
-
-1、**高质量项目合集（C++ / Java / Go / Python / AI**）
-
-可以获得星球里 **20+ 套项目专栏资料，不仅有详细讲解，而且都配套专属答疑服务**。
-
-全网十分稀缺的  **C++ AI应用项目（AI应用服务平台），Go AI项目（GopherAI），Java AI项目（JChatMind**）。
-
-![](https://file1.kamacoder.com/i/web/2025-12-31_11-41-52.jpg)
-
-2、**精品八股PDF**
-
-速记八股帮助众多录友们，短时间内快速上岸：
-
-![](https://file1.kamacoder.com/i/web/2025-09-28_17-44-23.jpg)
-
-3、**独家资料 & 学习氛围**
-
-大厂面经、薪资报告、秋招投递总结表
-
-![](https://file1.kamacoder.com/i/web/2025-09-28_18-26-47.jpg)
-
-学习路线清晰，方向明确
-
-![](https://file1.kamacoder.com/i/web/2025-09-28_18-39-32.jpg)
-
-星球里全是志同道合的伙伴，学习氛围 🔥🔥🔥
-
-![](https://file1.kamacoder.com/i/web/2025-09-28_18-50-25.jpg)
-
-4、**卡哥 1v1 提问 & 简历修改**
-
-直接向我提问，面试疑惑、学习路线、职业规划一对一解答
-
-![](https://file1.kamacoder.com/i/web/2025-09-29_10-07-44.jpg)
-
-加入[知识星球](https://mp.weixin.qq.com/s/iUiIRYlJvNqTsvfQXwK6FA)后如果不满意，三天内（72h）可全额退款！
-
-
+This project follows the MIT License. See [LICENSE](./LICENSE) for details.
