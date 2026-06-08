@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kama.jchatmind.message.SseMessage;
 import com.kama.jchatmind.service.SseService;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -13,6 +14,7 @@ import java.util.concurrent.ConcurrentMap;
 
 @Service
 @AllArgsConstructor
+@Slf4j
 public class SseServiceImpl implements SseService {
 
     private final ConcurrentMap<String, SseEmitter> clients = new ConcurrentHashMap<>();
@@ -54,10 +56,11 @@ public class SseServiceImpl implements SseService {
                         .data(sseMessageStr)
                 );
             } catch (IOException e) {
-                throw new RuntimeException(e);
+                clients.remove(chatSessionId);
+                log.warn("Failed to send SSE message for chatSessionId: {}", chatSessionId, e);
             }
         } else {
-            throw new RuntimeException("No client found for chatSessionId: " + chatSessionId);
+            log.warn("No SSE client found for chatSessionId: {}", chatSessionId);
         }
     }
 }

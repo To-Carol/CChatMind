@@ -10,7 +10,6 @@ import { Sender } from "@ant-design/x";
 import { useNavigate } from "react-router-dom";
 import {
   type AgentVO,
-  createChatMessage,
   createChatSession,
 } from "../../../api/api.ts";
 import { getAgentEmoji } from "../../../utils";
@@ -154,24 +153,21 @@ const EmptyAgentChatView: React.FC<DefaultAgentChatViewProps> = ({
         <div className="px-4 pb-4 pt-4">
           <Sender
             onSubmit={async () => {
-              if (!effectiveAgentId) return;
-              console.log("发送消息", message);
+              const trimmedMessage = message.trim();
+              if (!effectiveAgentId || !trimmedMessage) return;
               const response = await createChatSession({
                 agentId: effectiveAgentId,
-                title: message.slice(0, 20),
-              });
-              await createChatMessage({
-                sessionId: response.chatSessionId ?? "",
-                content: message,
-                role: "user",
-                agentId: effectiveAgentId,
+                title: trimmedMessage.slice(0, 20),
               });
               // 刷新聊天会话列表
               await refreshChatSessions();
               setMessage("");
-              navigate(
-                `/chat/${response.chatSessionId}`,
-              );
+              navigate(`/chat/${response.chatSessionId}`, {
+                state: {
+                  init: true,
+                  initMessage: trimmedMessage,
+                },
+              });
             }}
             value={message}
             loading={loading}

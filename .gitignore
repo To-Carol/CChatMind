@@ -1,0 +1,18 @@
+.DS_Store
+
+# Local machine environment helpers
+use-d-env.ps1
+start-postgres.ps1
+stop-postgres.ps1
+
+# Build outputs and dependencies
+jchatmind/target/
+ui/node_modules/
+ui/dist/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+application-local.yaml
+application-local.yml

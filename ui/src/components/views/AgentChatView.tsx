@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { message as antdMessage } from "antd";
 import AgentChatHistory from "./agentChatView/AgentChatHistory.tsx";
@@ -21,6 +21,7 @@ const AgentChatView: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const { agents } = useAgents();
   const { refreshChatSessions } = useChatSessions();
+  const initMessageSentRef = useRef(false);
 
   const [messages, setMessages] = useState<ChatMessageVO[]>([]);
 
@@ -79,7 +80,7 @@ const AgentChatView: React.FC = () => {
           replace: true,
           // 携带初始化消息
           state: {
-            init: false,
+            init: true,
             initMessage: message,
           },
         });
@@ -116,12 +117,18 @@ const AgentChatView: React.FC = () => {
   const [agentStatusType, setAgentStatusType] = useState<
     SseMessageType | undefined
   >(undefined);
+  const [sseReady, setSseReady] = useState(false);
+
+  useEffect(() => {
+    initMessageSentRef.current = false;
+  }, [chatSessionId]);
 
   useEffect(() => {
     // sse 连接处理, 不是对话消息不开连接
     if (!chatSessionId) {
       return;
     }
+    setSseReady(false);
     const es = new EventSource(
       `http://localhost:8080/sse/connect/${chatSessionId}`,
     );
@@ -161,6 +168,7 @@ const AgentChatView: React.FC = () => {
 
     es.addEventListener("init", (event) => {
       console.log("Received init message:", event.data);
+      setSseReady(true);
     });
 
     return () => {
@@ -168,6 +176,43 @@ const AgentChatView: React.FC = () => {
       es.close();
     };
   }, [chatSessionId]);
+
+  useEffect(() => {
+    const initMessage = state?.initMessage;
+    if (
+      !chatSessionId ||
+      !agentId ||
+      !sseReady ||
+      !state?.init ||
+      !initMessage ||
+      initMessageSentRef.current
+    ) {
+      return;
+    }
+
+    initMessageSentRef.current = true;
+    const sendInitialMessage = async () => {
+      try {
+        await createChatMessage({
+          agentId,
+          sessionId: chatSessionId,
+          role: "user",
+          content: initMessage,
+        });
+        await getChatMessages();
+        navigate(`/chat/${chatSessionId}`, {
+          replace: true,
+          state: null,
+        });
+      } catch (error) {
+        console.error("Failed to send initial message:", error);
+        initMessageSentRef.current = false;
+        antdMessage.error("发送消息失败，请重试");
+      }
+    };
+
+    sendInitialMessage().then();
+  }, [agentId, chatSessionId, getChatMessages, navigate, sseReady, state]);
 
   // 如果没有 chatSessionId，显示提示界面
   if (!chatSessionId) {
